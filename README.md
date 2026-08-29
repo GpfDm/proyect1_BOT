@@ -2,7 +2,7 @@
 
 Algorithmic trading bot written in Python, connected to Interactive Brokers via the TWS API, that trades low-float small-cap U.S. equities with a long-only bias.
 
-> ⚠️ **Project status**: active development / validation. The bot is currently not profitable in live trading — see [Status & limitations](#status--limitations) for an honest breakdown of why, and what's being fixed.
+> ⚠️ **Project status**: Completed. The bot is currently not profitable in live trading — see [Status & limitations](#status--limitations) for an honest breakdown of why, and what's being fixed.
 
 ---
 
