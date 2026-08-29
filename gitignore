@@ -8,11 +8,11 @@ __pycache__/
 *.pyc
 *.pyo
 
-# Logs y datos generados por el bot (no subir tu histórico real de trades)
+# Logs y datos generados por el bot 
 trades_log.csv
 *.log
 
-# Configuración local / credenciales (si algún día usas un .env)
+# Configuración local / credenciales
 .env
 
 # IDE
