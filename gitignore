@@ -1,0 +1,23 @@
+# Entorno virtual
+venv/
+env/
+.venv/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Logs y datos generados por el bot (no subir tu histórico real de trades)
+trades_log.csv
+*.log
+
+# Configuración local / credenciales (si algún día usas un .env)
+.env
+
+# IDE
+.vscode/
+.idea/
+
+# Sistema
+.DS_Store
