@@ -32,8 +32,6 @@ The bot runs **two strategies in parallel**, each with its own scanner and prema
 
 **Universe filters (scanner)**: max market cap $200M, max float 20M shares (via `yfinance`), minimum gap per scanner config.
 
-There are also two experimental strategies defined but not yet wired into the main loop (`CHINASLOCAS` and `PMLONG`), aimed at late-day HOD breakouts on volatile Chinese equities and premarket setups respectively — still in the design phase.
-
 ## Architecture
 ```
 main.py                 → orchestrates everything: connection, scanners, signal loop
