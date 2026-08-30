@@ -58,12 +58,8 @@ The strategies were developed and iterated on using Flash Research as the backte
 
 ## Status & limitations
 This is the most important section — be specific:
-- **Live vs. backtest discrepancy**: [describe how far live results are from backtest results, and your hypothesis for why]
-- **Known pending items** (already flagged in code comments in `Strategy.py`):
-  - Dynamic ATR-based TP/SL (currently a fixed percentage, doesn't adapt to each symbol's volatility)
-  - No unit tests for `Conditions` / the strategy classes against simulated data
-  - No backtest run directly against the strategy logic as implemented in code (backtesting so far has been done separately in Flash Research, not against this exact logic)
-- **Other limitations to review**: [add the scanner bug allowing ETFs / non-small-caps through, if it's still present in this version of the code]
+- **Live vs. backtest discrepancy**: in simulation, the bot returned close to 20% in about two weeks. That performance did not carry over to live trading — most likely a combination of statistical variance (a short two-week sample isn't representative) and the strategy itself not being sufficiently well-designed or robust.
+- **Scanner bug with ETF's**: the scanner occasionally generated entry signals on ETFs, which don't fit the small-cap/low-float thesis this bot targets. In practice, Interactive Brokers itself rejected these orders, so no bad trades were actually executed — but the underlying filter should be fixed so the bot doesn't attempt them in the first place.
 - **Error handling**: the bot has not been hardened against every possible failure mode (network drops, unexpected API responses, edge-case market conditions, etc.) — some error handling is in place (see `IBConnection.error`), but it hasn't been stress-tested exhaustively.
 
 ## Next steps
