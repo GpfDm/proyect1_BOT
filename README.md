@@ -92,4 +92,4 @@ Requires TWS or IB Gateway running locally with the API enabled (port configurab
 
 ---
 
-*Personal algorithmic trading project, developed as part of a 4-person trading team.*
+*Personal algorithmic trading project.*
