@@ -4,16 +4,14 @@ from email.mime.text import MIMEText
 from src.main.IBClient.ohlc.Data import Ohlc
 
 
-# ─────────────────────────────────────────────
-#  NOTIFICACIONES
-# ─────────────────────────────────────────────
+#  NOTIFICATIONS
 class Notifier():
     '''
-    Envía notificaciones cuando el bot no puede entrar en una señal
-    por haber llegado al máximo de posiciones.
+    Sends notifications when the bot cannot enter a signal
+    because the maximum number of positions has been reached.
 
-    Por ahora imprime en consola (siempre funciona) y opcionalmente
-    manda un email si configuras las credenciales.
+    For now, it prints everything to the console (always works)
+    and can optionally send an email if credentials are configured.
     '''
     def __init__(self, email_from: str = "", email_to: str = "", email_password: str = ""):
         self.email_from = email_from
@@ -22,13 +20,13 @@ class Notifier():
         self.email_enabled = bool(email_from and email_to and email_password)
 
     def send(self, subject: str, body: str):
-        # Siempre imprime en consola
+        # Always print to the console
         print(f"\n{'='*50}")
         print(f"[NOTIFICACIÓN] {subject}")
         print(f"{body}")
         print(f"{'='*50}\n")
 
-        # Email (opcional)
+        # Email (optional)
         if self.email_enabled:
             try:
                 msg = MIMEText(body)
@@ -78,21 +76,19 @@ class Notifier():
         self.send(subject, body)
 
 
-# ─────────────────────────────────────────────
-#  POSITION MANAGER
-# ─────────────────────────────────────────────
+#  POSITION MANAGER─
 class PositionManager():
     '''
-    Gestiona el límite de posiciones simultáneas y el capital total en riesgo.
+    Manages the maximum number of simultaneous positions and the total capital at risk.
 
-    Configuración:
-      max_positions : int    → máximo de posiciones abiertas a la vez (default 5)
-      risk_per_trade: float  → $ arriesgados por posición (default $200)
+    Configuration:
+      max_positions : int    → maximum number of open positions at once (default 5)
+      risk_per_trade: float  → $ amount at risk per position (default $200)
 
-    Flujo:
-      - try_enter(ohlc, tp_pct, sl_pct) → intenta abrir posición; notifica si no puede.
-      - on_position_closed(symbol)       → llamar cuando Ohlc cierra posición (TP/SL/stop duro).
-      - active_symbols()                 → lista de símbolos con posición abierta.
+    Flow:
+      - try_enter(ohlc, tp_pct, sl_pct) → attempts to open a position; sends a notification if it cannot.
+      - on_position_closed(symbol)       → call when Ohlc closes a position (TP/SL/hard stop).
+      - active_symbols()                 → returns a list of symbols with an open position.
     '''
 
     def __init__(self,
@@ -101,13 +97,13 @@ class PositionManager():
                  notifier: Notifier = None):
         self.max_positions = max_positions
         self.risk_per_trade = risk_per_trade
-        self.notifier = notifier or Notifier()  # sin email por defecto
+        self.notifier = notifier or Notifier()  # no email by default
         self._lock = threading.Lock()
 
-        # symbol → Ohlc de posiciones actualmente abiertas
+        # symbol → Ohlc instance for currently open positions
         self._active: dict[str, Ohlc] = {}
 
-    # ─── Consultas ───────────────────────────────────────────────
+    # Queries 
     def active_symbols(self) -> list[str]:
         with self._lock:
             return list(self._active.keys())
@@ -124,25 +120,25 @@ class PositionManager():
         with self._lock:
             return symbol in self._active
 
-    # ─── Intento de entrada ──────────────────────────────────────
+    # Entry attempt 
     def try_enter(self, ohlc: Ohlc, tp_pct: float = 0.20, sl_pct: float = 0.05) -> bool:
         '''
-        Intenta abrir una posición en `ohlc`.
-        Devuelve True si entró, False si fue ignorada (con notificación).
+        Attempts to open a position in `ohlc`.
+        Returns True if the position was opened, False if the signal was ignored (with notification).
 
-        Motivos por los que no entra:
-          - Ya hay posición abierta en ese símbolo.
-          - Se ha llegado al máximo de posiciones simultáneas.
-          - El símbolo es ilíquido (is_liquid falla).
+        Reasons why the entry may be rejected:
+          - There is already an open position in that symbol.
+          - The maximum number of simultaneous positions has been reached.
+          - The symbol is illiquid (is_liquid fails).
         '''
         symbol = ohlc.symbol
         last_price = ohlc.data[-1]["close"] if ohlc.data else 0
 
-        # ── ¿Ya tiene posición? ──────────────────────────────────
+        # Already in a position? 
         if self.has_position(symbol):
-            return False  # silencioso, es normal en cada vuelta del loop
+            return False  # silent, this is expected on every loop iteration
 
-        # ── ¿Máximo alcanzado? ───────────────────────────────────
+        # Maximum reached?
         if self.is_full():
             self.notifier.signal_missed(
                 symbol=symbol,
@@ -152,7 +148,7 @@ class PositionManager():
             )
             return False
 
-        # ── ¿Líquido? ────────────────────────────────────────────
+        # Is the symbol liquid?
         bid = ohlc.connection._bid.get(symbol, 0)
         ask = ohlc.connection._ask.get(symbol, 0)
         if not ohlc.is_liquid(bid, ask):
@@ -164,17 +160,17 @@ class PositionManager():
             )
             return False
 
-        # ── Asignar riesgo y ejecutar entrada ────────────────────
+        # Set risk and execute entry
         ohlc.risk = self.risk_per_trade
         self._execute_entry(ohlc, tp_pct, sl_pct)
         return True
 
     def _execute_entry(self, ohlc: Ohlc, tp_pct: float, sl_pct: float):
         '''
-        Manda la orden, registra la posición y notifica.
+        Sends the order, registers the position, and sends a notification.
         '''
         #from src.main.IBClient.Strategy.Strategy import _place_order  
-        # # import local para evitar circular  # import local para evitar circular: CRASHEA NO METER
+        # # local import to avoid circular import  # local import to avoid circular import: CRASHES, DON'T ADD
 
         symbol = ohlc.symbol
         order = ohlc.buy_order()
@@ -187,13 +183,13 @@ class PositionManager():
         tp_price = entry_price * (1 + tp_pct)
         sl_price = entry_price * (1 - sl_pct)
 
-        # Registrar como activa ANTES de open_position (que es síncrono)
+        # Register as active BEFORE open_position (which is synchronous)
         with self._lock:
             self._active[symbol] = ohlc
 
         ohlc.open_position(entry_price, tp_price, sl_price)
 
-        # Notificar entrada
+        # Notify about the entry
         self.notifier.position_opened(
             symbol=symbol,
             entry_price=entry_price,
@@ -206,11 +202,11 @@ class PositionManager():
               f"slots={len(self._active)}/{self.max_positions} | "
               f"riesgo=${self.risk_per_trade}")
 
-    # ─── Cierre de posición ──────────────────────────────────────
+    # Position close
     def on_position_closed(self, symbol: str, reason: str, pnl: float):
         '''
-        Llamar desde Ohlc._close_position y Ohlc.on_hard_stop_filled
-        para liberar el slot y notificar.
+        Called from Ohlc._close_position and Ohlc.on_hard_stop_filled
+        to free up the slot and send a notification.
         '''
         with self._lock:
             self._active.pop(symbol, None)
@@ -225,7 +221,7 @@ class PositionManager():
               f"reason={reason} | pnl={pnl:+.4f}$ | "
               f"slots libres={self.max_positions - len(self._active)}/{self.max_positions}")
 
-    # ─── Estado ──────────────────────────────────────────────────
+    # Status
     def status(self):
         with self._lock:
             print(f"\n[PM STATUS] {len(self._active)}/{self.max_positions} posiciones abiertas")
@@ -233,3 +229,4 @@ class PositionManager():
                 print(f"  {symbol}: entry={ohlc.entry_price:.4f} "
                       f"TP={ohlc.tp_price:.4f} SL={ohlc.sl_price:.4f} "
                       f"last={ohlc.last_price}")
+                
