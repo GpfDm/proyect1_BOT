@@ -57,7 +57,6 @@ Flow: IB's scanner detects candidates → `ScannerManager` filters them (premark
 The strategies were developed and iterated on using Flash Research as the backtesting simulator. However, survivorship bias and overoptimization in that environment make these backtest results invalid as a basis for live trading — the numbers looked strong in simulation but don't reliably translate to real market conditions. This gap is the main reason the bot's live results diverge from what the backtests suggested.
 
 ## Status & limitations
-This is the most important section — be specific:
 - **Live vs. backtest discrepancy**: in simulation, the bot returned close to 20% in about two weeks. That performance did not carry over to live trading — most likely a combination of statistical variance (a short two-week sample isn't representative) and the strategy itself not being sufficiently well-designed or robust.
 - **Scanner bug with ETF's**: the scanner occasionally generated entry signals on ETFs, which don't fit the small-cap/low-float thesis this bot targets. In practice, Interactive Brokers itself rejected these orders, so no bad trades were actually executed — but the underlying filter should be fixed so the bot doesn't attempt them in the first place.
 - **Error handling**: the bot has not been hardened against every possible failure mode (network drops, unexpected API responses, edge-case market conditions, etc.) — some error handling is in place (see `IBConnection.error`), but it hasn't been stress-tested exhaustively.
