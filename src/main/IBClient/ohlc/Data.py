@@ -1,26 +1,11 @@
-import threading
-import csv
-import os
-from typing import Optional
-from datetime import datetime
-from ibapi.client import EClient
-from ibapi.wrapper import EWrapper
-from ibapi.contract import Contract
-from ibapi.tag_value import TagValue
-from ibapi.order import Order
-import pytz
-from datetime import datetime
 
-
-# ─────────────────────────────────────────────
 #  DATA FOR STRATEGY
-# ─────────────────────────────────────────────
 class Data_for_Strategy():
     '''
-    Parámetros para reqHistoricalData.
+    Parameters used by reqHistoricalData.
     '''
     def __init__(self):
-        self.contract: Contract         # asignado via set_contract()
+        self.contract: Contract         # assigned via set_contract()
         self.endDateTime: str = ""
         self.durationStr: str = ""
         self.bar_size_setting: str = ""
@@ -41,16 +26,16 @@ class Data_for_Strategy():
     def set_duration_to_show(self, v: str):   self.duration_to_show = v
 
 
-# ─────────────────────────────────────────────
+
 #  TRADE LOGGER
-# ─────────────────────────────────────────────
 class TradeLogger():
     '''
-    Logging persistente de cada trade en CSV.
-    Columnas: symbol, entry_time, exit_time, entry_price, exit_price,
-              planned_entry, tp_price, sl_price, quantity, pnl,
-              slippage_entry, slippage_exit, reason
+    Persists every trade to a CSV file.
+    Columns: symbol, entry_time, exit_time, entry_price, exit_price,
+             planned_entry, tp_price, sl_price, quantity, pnl,
+             slippage_entry, slippage_exit, reason
     '''
+
     LOG_PATH = "trades_log.csv"
     HEADERS = [
         "symbol", "entry_time", "exit_time",
@@ -60,7 +45,7 @@ class TradeLogger():
     ]
 
     def __init__(self):
-        # Crea el CSV con cabecera si no existe
+        # Create the CSV with headers if it doesn't exist
         if not os.path.exists(self.LOG_PATH):
             with open(self.LOG_PATH, "w", newline="") as f:
                 csv.DictWriter(f, fieldnames=self.HEADERS).writeheader()
@@ -71,31 +56,30 @@ class TradeLogger():
         print(f"[LOG] Trade guardado: {record}")
 
 
-_trade_logger = TradeLogger()  # instancia global, compartida por todos los Ohlc
+_trade_logger = TradeLogger()  # global instance shared by all Ohlc objects
 
 
-# ─────────────────────────────────────────────
-#  OHLC  (una instancia por símbolo)
-# ─────────────────────────────────────────────
+#  OHLC  (one instance per symbol)
 class Ohlc():
     '''
-    Una instancia por símbolo. Delega conexión en IBConnection compartida.
+    One instance per symbol. Uses the shared IBConnection for broker communication.
     '''
+
     def __init__(self, symbol: str, connection, contract: Contract = None):
         self.symbol = symbol
         self.connection = connection
         self.req_id: Optional[int] = None
         self.id_data: Optional[int] = None
-        self.estado_data: bool = False # Control de envío de datos por ticket
+        self.estado_data: bool = False # Controls whether data is being streamed
         self.data_historic = Data_for_Strategy()
         if contract is not None:
             self.data_historic.set_contract(contract)
 
-        self.data: list[dict] = []   # lista de velas de este símbolo
+        self.data: list[dict] = []   # list of bars for this symbol
         self.quantity: float = 0
         self.risk: float = 200
 
-        # ── Estado de posición ──
+        # ── Position state ──
         self.in_position: bool = False
         self.entry_price: float = 0.0
         self.tp_price: Optional[float] = None
@@ -107,15 +91,15 @@ class Ohlc():
         self.entry_order_id: Optional[int] = None
         self._entry_time: Optional[str] = None
 
-        # ── PositionManager (se asigna desde fuera al crear el Ohlc) ──
-        self.position_manager = None    # referencia al PositionManager compartido
+        # ── PositionManager (assigned externally when the Ohlc is created) ──
+        self.position_manager = None    # reference to the shared PositionManager
 
-        # ── Liquidez ──
-        self.MIN_VOLUME_BARS = 2       # mínimo de velas con volumen para considerar líquido
-        self.MIN_AVG_VOLUME = 5000    # volumen medio mínimo por vela
-        self.MAX_SPREAD_PCT = 0.015     # spread máximo permitido (1.5%)
+        # ── Liquidity ──
+        self.MIN_VOLUME_BARS = 2       # minimum number of bars with volume to consider the stock liquid
+        self.MIN_AVG_VOLUME = 5000    # minimum average volume per bar
+        self.MAX_SPREAD_PCT = 0.015     # maximum allowed spread (1.5%)
 
-    # ─── Datos históricos ───────────────────────────────────────
+    # ─── Historical data ───────────────────────────────────────
     def start(self):
         self.req_id = self.connection.next_id()
         self.connection.register(self.req_id, self)
@@ -163,11 +147,11 @@ class Ohlc():
         else:
             self.data[-1] = new_bar
 
-    # ─── Liquidez ────────────────────────────────────────────────
+    # ─── Liquidity ────────────────────────────────────────────────
     def is_liquid(self, bid: float, ask: float) -> bool:
         '''
-        Comprueba volumen mínimo y spread máximo antes de entrar.
-        Se llama desde enter_position (Strategy.py).
+        Checks minimum volume and maximum spread before entering a trade.
+        Called from enter_position (Strategy.py).
         '''
         if len(self.data) < self.MIN_VOLUME_BARS:
             print(f"[{self.symbol}] ILÍQUIDO: pocas velas ({len(self.data)})")
@@ -187,15 +171,15 @@ class Ohlc():
 
         return True
 
-    # ─── Órdenes ─────────────────────────────────────────────────
+    # ─── Orders ─────────────────────────────────────────────────
     def calcular_Quantity(self, riesgo: float) -> float:
-     if not self.data:
-        return 0
-     close = self.data[-1]["close"]
-     if close <= 0:
-        return 0
-     qty = int(riesgo / close)
-     return min(qty, 10000)  # máximo 10000 acciones por seguridad
+        if not self.data:
+            return 0
+        close = self.data[-1]["close"]
+        if close <= 0:
+            return 0
+        qty = int(riesgo / close)
+        return min(qty, 10000)  # max 10,000 shares as a safety limit
 
     def buy_order(self) -> Order:
         order = Order()
@@ -213,8 +197,8 @@ class Ohlc():
         order.action = "SELL"
         order.orderType = "MKT"
         order.totalQuantity = self.quantity
-        order.eTradeOnly = False    # ← AÑADIR para que funcione el comprar.
-        order.firmQuoteOnly = False # ← AÑADIR para que funcione el comprar.
+        order.eTradeOnly = False    # ← REQUIRED for the buy order to work.
+        order.firmQuoteOnly = False # ← REQUIRED for the buy order to work.
         return order
 
     def stop_loss_order(self, stop_price: float) -> Order:
@@ -222,10 +206,10 @@ class Ohlc():
         order.action = "SELL"
         order.orderType = "STP"
         order.totalQuantity = self.quantity
-        order.eTradeOnly = False    # ← AÑADIR para que funcione el comprar.
-        order.firmQuoteOnly = False # ← AÑADIR para que funcione el comprar.
-        order.auxPrice = stop_price   # precio que dispara el stop
-        order.tif = "GTC"            # sobrevive aunque el bot/TWS se caiga
+        order.eTradeOnly = False    # ← REQUIRED for the buy order to work.
+        order.firmQuoteOnly = False # ← REQUIRED for the buy order to work.
+        order.auxPrice = stop_price   # price that triggers the stop
+        order.tif = "GTC"            # remains active even if the bot/TWS goes down
         return order
 
     @staticmethod
@@ -237,7 +221,7 @@ class Ohlc():
         contract.currency = "USD"
         return contract
 
-    # ─── Tick data (monitoreo TP/SL en tiempo real) ───────────────
+    # ─── Tick data (real-time TP/SL monitoring) ───────────────
     def request_tick_data(self):
         self.tick_req_id = self.connection.next_id()
         self.connection.register_tick(self.tick_req_id, self)
@@ -262,25 +246,25 @@ class Ohlc():
             self.connection.unregister_tick(self.tick_req_id)
             self.tick_req_id = None
 
-    # ─── Gestión de posición ─────────────────────────────────────
+    # ─── Position management ─────────────────────────────────────
     def open_position(self, entry_price: float, tp_price: float, sl_price: float):
         self.in_position = True
         self._planned_entry = entry_price
-        self.entry_price = entry_price   # se sobreescribirá con el fill real
+        self.entry_price = entry_price   # overwritten later with the actual fill price
         self.tp_price = tp_price
         self.sl_price = sl_price
         self._entry_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        # Stop duro de respaldo en el broker (GTC, sobrevive si el bot cae)
+        # Hard backup stop at the broker (GTC, remains active if the bot goes down)
         stop_order = self.stop_loss_order(sl_price)
-        self.hard_stop_order_id = self.connection.next_order_id() 
+        self.hard_stop_order_id = self.connection.next_order_id()
         try:
             self.connection.placeOrder(
                 self.hard_stop_order_id,
                 self.data_historic.contract,
                 stop_order
             )
-            # Registramos el stop duro para detectar si se ejecuta sin el bot
+            # Register the hard stop so we can detect if it gets filled while the bot is down
             self.connection.register_order(self.hard_stop_order_id, self)
             print(f"[{self.symbol}] Stop duro enviado a {sl_price} (id={self.hard_stop_order_id})")
         except Exception as e:
@@ -291,16 +275,16 @@ class Ohlc():
 
     def on_tick_price(self, price: float):
         '''
-        Llamado por IBConnection.tickPrice (tickType LAST).
-        Filtra ticks inválidos y compara contra TP/SL.
+        Called by IBConnection.tickPrice (tickType LAST).
+        Filters invalid ticks and checks them against the TP/SL levels.
         '''
-        # ── Filtro ticks inválidos ──
+        # ── Filter invalid ticks ──
         if price is None or price <= 0:
             return
 
         self.last_price = price
 
-        # ── Detección de HALT via precio (TWS envía -1.0 en halt) ──
+        # ── Detect HALT by price (TWS sends -1.0 during a halt) ──
         if price < 0:
             print(f"[{self.symbol}] ⚠️  POSIBLE HALT detectado (precio={price})")
             return
@@ -315,21 +299,21 @@ class Ohlc():
 
     def on_halted(self):
         '''
-        Llamado por IBConnection.tickString cuando tickType=HALTED.
-        Avisa y NO intenta mandar órdenes mientras el símbolo está halted.
+        Called by IBConnection.tickString when tickType=HALTED.
+        Logs the halt and does not attempt to send orders while the symbol is halted.
         '''
         print(f"[{self.symbol}] 🛑 HALT detectado. Posición={'ABIERTA' if self.in_position else 'SIN POSICIÓN'}. "
               f"El stop duro en broker (id={self.hard_stop_order_id}) sigue activo.")
 
     def on_resumed(self):
         '''
-        Llamado cuando el símbolo sale del halt (tickType resumed).
+        Called when the symbol resumes trading after a halt (tickType resumed).
         '''
         print(f"[{self.symbol}] ✅ Reanudado tras halt. Revisando posición...")
 
     def _close_position(self, reason: str, exit_price: float):
         '''
-        Cierra la posición con una market order y loguea el trade.
+        Closes the position with a market order and logs the trade.
         '''
         order = self.sell_order()
         order_id = self.connection.next_order_id()
@@ -340,7 +324,7 @@ class Ohlc():
             print(f"[ERROR cierre {reason}] {self.symbol}: {e}")
             return
 
-        # Cancelar stop duro (ya no necesario si cerramos nosotros)
+        # Cancel the hard stop since it is no longer needed
         if self.hard_stop_order_id is not None:
             try:
                 self.connection.cancelOrder(self.hard_stop_order_id)
@@ -349,10 +333,10 @@ class Ohlc():
             self.connection.ohlc_by_order_id.pop(self.hard_stop_order_id, None)
             self.hard_stop_order_id = None
 
-        # ── Logging del trade ──
+        # ── Log the trade ──
         pnl = (exit_price - self.entry_price) * self.quantity
         slippage_entry = (self.entry_price - self._planned_entry) if self._planned_entry else 0
-        slippage_exit = 0   # se actualizará en on_exec_details de la salida si lo implementas
+        slippage_exit = 0   # updated in on_exec_details for the exit if implemented
         _trade_logger.log({
             "symbol":          self.symbol,
             "entry_time":      self._entry_time,
@@ -374,15 +358,15 @@ class Ohlc():
         self.sl_price = None
         self.cancel_tick_data()
 
-        # Notificar al PositionManager para liberar el slot
+        # Notify PositionManager so it can free up the slot
         if self.position_manager is not None:
             self.position_manager.on_position_closed(self.symbol, reason, round(pnl, 4))
 
     def on_hard_stop_filled(self, fill_price: float):
         '''
-        Llamado por IBConnection.orderStatus cuando el stop duro
-        se ejecutó (bot estaba caído o hubo un gap).
-        Cierra el estado interno sin mandar otra orden.
+        Called by IBConnection.orderStatus when the hard stop is filled
+        (e.g. the bot was down or there was a gap).
+        Clears the internal state without sending another order.
         '''
         print(f"[{self.symbol}] ⚠️  Stop duro ejecutado a {fill_price} (el bot estaba caído o hubo gap)")
         pnl = (fill_price - self.entry_price) * self.quantity
@@ -408,53 +392,54 @@ class Ohlc():
         self.sl_price = None
         self.cancel_tick_data()
 
-        # Notificar al PositionManager para liberar el slot
+        # Notify PositionManager so it can free up the slot
         if self.position_manager is not None:
             self.position_manager.on_position_closed(self.symbol, "STOP_DURO", round(pnl, 4))
 
     def restore_position(self, quantity: float, avg_cost: float):
         '''
-        Llamado al arrancar el bot si reqPositions detecta que
-        ya hay posición abierta en la cuenta (bot se reinició).
-        Restaura el estado mínimo para que el monitoreo TP/SL funcione.
-        NOTA: TP/SL se pierden al reiniciar — aquí se ponen valores
-        conservadores; ajusta a tu criterio.
+        Called when the bot starts up and reqPositions detects
+        that there is already an open position in the account (bot restart).
+        Restores the minimum state required for TP/SL monitoring.
+        NOTE: TP/SL levels are lost after a restart — conservative values
+        are used here; adjust them as needed.
         '''
         print(f"[{self.symbol}] Posición existente detectada al arrancar: qty={quantity} cost={avg_cost}")
         self.quantity = quantity
         self.entry_price = avg_cost
         self._planned_entry = avg_cost
         self._entry_time = "RECUPERADO_AL_ARRANCAR"
-        self.tp_price = avg_cost * 1.10   # TP conservador 10% (ajustar)
-        self.sl_price = avg_cost * 0.95   # SL conservador 5%  (ajustar)
+        self.tp_price = avg_cost * 1.10   # Conservative 10% TP (adjust as needed)
+        self.sl_price = avg_cost * 0.95   # Conservative 5% SL (adjust as needed)
         self.in_position = True
         self.request_tick_data()
         print(f"[{self.symbol}] Estado restaurado | TP={self.tp_price:.4f} SL={self.sl_price:.4f}")
 
-    # ─── execDetails: precio de entrada real ─────────────────────
+    # ─── execDetails: actual entry price ─────────────────────
     def on_exec_details(self, order_id: int, fill_price: float):
-     if self.entry_order_id is None:      # ← primero: ¿ya procesado?
-        return
-     if order_id != self.entry_order_id:  # ← segundo: ¿es nuestra orden?
-        return
+        if self.entry_order_id is None:      # ← first: has it already been processed?
+            return
+        if order_id != self.entry_order_id:  # ← second: is this our order?
+            return
 
-     planned = self._planned_entry
-     self.entry_price = fill_price
+        planned = self._planned_entry
+        self.entry_price = fill_price
 
-     if self.tp_price is not None and planned:
-        tp_pct = (self.tp_price / planned) - 1
-        self.tp_price = fill_price * (1 + tp_pct)
-     if self.sl_price is not None and planned:
-        sl_pct = 1 - (self.sl_price / planned)
-        self.sl_price = fill_price * (1 - sl_pct)
+        if self.tp_price is not None and planned:
+            tp_pct = (self.tp_price / planned) - 1
+            self.tp_price = fill_price * (1 + tp_pct)
+        if self.sl_price is not None and planned:
+            sl_pct = 1 - (self.sl_price / planned)
+            self.sl_price = fill_price * (1 - sl_pct)
 
-     print(f"[{self.symbol}] Fill real={fill_price} (estimado={planned}) "
-          f"-> TP={self.tp_price:.4f} SL={self.sl_price:.4f}")
+        print(f"[{self.symbol}] Fill real={fill_price} (estimado={planned}) "
+              f"-> TP={self.tp_price:.4f} SL={self.sl_price:.4f}")
 
-     self.entry_order_id = None  # marcar como procesado
+        self.entry_order_id = None  # mark as processed
+
 
 # ─────────────────────────────────────────────
-#  IBCONNECTION  (única conexión al broker)
+#  IBCONNECTION  (single broker connection)
 # ─────────────────────────────────────────────
 class IBConnection(EClient, EWrapper):
     def __init__(self):
@@ -463,19 +448,19 @@ class IBConnection(EClient, EWrapper):
         self._lock = threading.Lock()
         self.hilo = None
         self._premarket_callbacks: dict = {}
-        self._next_order_id = 0  # se actualiza con nextValidId
+        self._next_order_id = 0  # updated by nextValidId
 
-        # Mapas de ruteo
-        self.ohlc_by_reqid:    dict[int, Ohlc] = {}   # históricos
+        # Routing maps
+        self.ohlc_by_reqid:    dict[int, Ohlc] = {}   # historical data
         self.tick_by_reqid:    dict[int, Ohlc] = {}   # tick data
-        self.ohlc_by_order_id: dict[int, Ohlc] = {}   # órdenes (entrada + stop duro)
+        self.ohlc_by_order_id: dict[int, Ohlc] = {}   # orders (entry + hard stop)
         self.scanner_by_reqid: dict[int, object] = {}  # ScannerClient
 
-        # Bid/ask por símbolo para is_liquid()
+        # Bid/ask by symbol for is_liquid()
         self._bid: dict[str, float] = {}
         self._ask: dict[str, float] = {}
 
-    # ─── Conexión ────────────────────────────────────────────────
+    # ─── Connection ────────────────────────────────────────────────
     def start(self):
         self.hilo = threading.Thread(target=self.run, daemon=True)
         self.hilo.start()
@@ -485,7 +470,7 @@ class IBConnection(EClient, EWrapper):
             self._next_id += 1
             return self._next_id
 
-    # ─── Registro ────────────────────────────────────────────────
+    # ─── Registration ───────────────────────────────────────────────
     def register(self, req_id: int, ohlc: Ohlc):
         self.ohlc_by_reqid[req_id] = ohlc
 
@@ -501,22 +486,23 @@ class IBConnection(EClient, EWrapper):
     def register_order(self, order_id: int, ohlc: Ohlc):
         self.ohlc_by_order_id[order_id] = ohlc
 
-    # ─── Callbacks históricos ─────────────────────────────────────
+    # ─── Historical data callbacks ─────────────────────────────────────
     def historicalData(self, reqId, bar):
-      if reqId in self._premarket_callbacks:
-        try:
-            bar_time_local = datetime.strptime(bar.date.strip(), "%Y%m%d %H:%M:%S")
-            local_tz = pytz.timezone("Europe/Madrid")
-            et_tz = pytz.timezone("America/New_York")
-            bar_time_et = local_tz.localize(bar_time_local).astimezone(et_tz)
-            if bar_time_et.hour < 9 or (bar_time_et.hour == 9 and bar_time_et.minute < 30):
-                self._premarket_callbacks[reqId]["volumes"].append(bar.volume)
-        except Exception as e:
-            print(f"[DEBUG premarket] {e} raw={bar.date!r}")
-        return
-      ohlc = self.ohlc_by_reqid.get(reqId)
-      if ohlc:
-        ohlc.on_historical_data(bar)
+        if reqId in self._premarket_callbacks:
+            try:
+                bar_time_local = datetime.strptime(bar.date.strip(), "%Y%m%d %H:%M:%S")
+                local_tz = pytz.timezone("Europe/Madrid")
+                et_tz = pytz.timezone("America/New_York")
+                bar_time_et = local_tz.localize(bar_time_local).astimezone(et_tz)
+                if bar_time_et.hour < 9 or (bar_time_et.hour == 9 and bar_time_et.minute < 30):
+                    self._premarket_callbacks[reqId]["volumes"].append(bar.volume)
+            except Exception as e:
+                print(f"[DEBUG premarket] {e} raw={bar.date!r}")
+            return
+
+        ohlc = self.ohlc_by_reqid.get(reqId)
+        if ohlc:
+            ohlc.on_historical_data(bar)
          
     def historicalDataUpdate(self, reqId, bar):
         ohlc = self.ohlc_by_reqid.get(reqId)
@@ -525,21 +511,20 @@ class IBConnection(EClient, EWrapper):
 
     def historicalDataEnd(self, reqId, start, end):
         '''
-        Señala que IB terminó de enviar todas las velas históricas.
-        Usado por _check_premarket_volume en ScannerManager para saber
-        cuándo dejar de esperar. Por defecto no hace nada —
-        ScannerManager lo sustituye temporalmente durante el filtro--> DESACTUALIZADO EL DOCKSTRING.
+        Signals that IB has finished sending all historical bars.
+        Used by _check_premarket_volume in ScannerManager to know
+        when it can stop waiting.
         '''
         if reqId in self._premarket_callbacks:
-         self._premarket_callbacks[reqId]["done"] = True
-         return
+            self._premarket_callbacks[reqId]["done"] = True
+            return
         pass
 
-    # ─── Callbacks tick data ──────────────────────────────────────
+    # ─── Tick data callbacks ──────────────────────────────────────
     def tickPrice(self, reqId, tickType, price, attrib):
         '''
         tickType 1=BID, 2=ASK, 4=LAST
-        Guardamos bid/ask para is_liquid() y ruteamos LAST al Ohlc.
+        Store bid/ask for is_liquid() and route LAST to Ohlc.
         '''
         from ibapi.ticktype import TickTypeEnum
         ohlc = self.tick_by_reqid.get(reqId)
@@ -557,7 +542,7 @@ class IBConnection(EClient, EWrapper):
     def tickString(self, reqId, tickType, value):
         '''
         tickType 49 = HALTED
-        value "0" = trading normal, "1" o "2" = halt
+        value "0" = normal trading, "1" or "2" = halted
         '''
         HALTED_TICK = 49
         if tickType != HALTED_TICK:
@@ -570,10 +555,10 @@ class IBConnection(EClient, EWrapper):
         elif value == "0":
             ohlc.on_resumed()
 
-    # ─── Callbacks órdenes ────────────────────────────────────────
+    # ─── Order callbacks ────────────────────────────────────────
     def execDetails(self, reqId, contract, execution):
         '''
-        Recibimos fill de cualquier orden. Ruteamos al Ohlc por orderId.
+        Receives fills for any order and routes them to the corresponding Ohlc by orderId.
         '''
         ohlc = self.ohlc_by_order_id.get(execution.orderId)
         if ohlc:
@@ -583,35 +568,37 @@ class IBConnection(EClient, EWrapper):
                     avgFillPrice, permId, parentId, lastFillPrice,
                     clientId, whyHeld, mktCapPrice):
         '''
-        Detecta si el stop duro se llenó (ej: bot estaba caído).
-        status "Filled" con filled > 0 en el hard_stop_order_id.
+        Detects when the hard stop is filled (e.g. the bot was down).
+        Status "Filled" with filled > 0 means the hard stop was triggered.
         '''
         if status != "Filled" or filled <= 0:
             return
         ohlc = self.ohlc_by_order_id.get(orderId)
         if ohlc is None:
             return
-        # Solo actuar si es el stop duro (no la entrada ni la salida activa)
+
+        # Only handle the hard stop, not the entry or active exit order
         if orderId == ohlc.hard_stop_order_id:
             ohlc.on_hard_stop_filled(avgFillPrice)
             self.ohlc_by_order_id.pop(orderId, None)
 
-    # ─── reqPositions: recuperar estado al arrancar ───────────────
+    # ─── reqPositions: restore state on startup ───────────────
     def request_existing_positions(self, manager):
         '''
-        Llama a reqPositions al arrancar el bot.
-        Si hay posiciones abiertas en la cuenta, restaura el estado
-        del Ohlc correspondiente (o crea uno nuevo si no existe).
+        Calls reqPositions when the bot starts.
+        If there are open positions in the account, restores the state
+        of the corresponding Ohlc (or creates one if it doesn't exist).
         '''
         self._position_manager_ref = manager
         self.reqPositions()
 
     def position(self, account, contract, position, avgCost):
         '''
-        Callback de reqPositions. Una llamada por posición abierta.
+        Callback for reqPositions. Called once for each open position.
         '''
         if position == 0:
-            return  # posición cerrada, ignorar
+            return  # position is closed, ignore
+
         symbol = contract.symbol
         manager = getattr(self, "_position_manager_ref", None)
         if manager is None:
@@ -619,10 +606,10 @@ class IBConnection(EClient, EWrapper):
 
         print(f"[ARRANQUE] Posición existente detectada: {symbol} qty={position} cost={avgCost}")
 
-        # Si ya tenemos Ohlc para este símbolo, restauramos
+        # If we already have an Ohlc for this symbol, restore its state
         ohlc = manager.ohlc_by_symbol.get(symbol)
         if ohlc is None:
-            # Crear Ohlc mínimo para gestionar la posición
+            # Create a minimal Ohlc to manage the existing position
             ohlc = Ohlc(symbol, self, contract)
             ohlc.data_historic.set_duration_str("1 D")
             ohlc.data_historic.set_bar_size_setting("1 min")
@@ -635,7 +622,7 @@ class IBConnection(EClient, EWrapper):
     def positionEnd(self):
         print("[ARRANQUE] reqPositions completado.")
 
-    # ─── Callbacks scanner ────────────────────────────────────────
+    # ─── Scanner callbacks ────────────────────────────────────────
     def scannerData(self, reqId, rank, contractDetails, distance, benchmark, projection, legsStr):
         scanner = self.scanner_by_reqid.get(reqId)
         if scanner:
@@ -645,36 +632,38 @@ class IBConnection(EClient, EWrapper):
         scanner = self.scanner_by_reqid.get(reqId)
         if scanner:
             scanner.scannerDataEnd(reqId)
-    def nextValidId(self, orderId: int):
-     '''
-     IB llama a esto al conectar con el primer ID válido de orden.
-     Todos los placeOrder deben usar IDs >= a este.
-     '''
-     self._next_order_id = orderId
-     print(f"[IB] nextValidId recibido: {orderId}")
-    def next_order_id(self) -> int:
-     '''
-     Usar SOLO para órdenes (placeOrder).
-     next_id() sigue siendo para reqHistoricalData, reqMktData, etc.
-     '''
-     with self._lock:
-        oid = self._next_order_id
-        self._next_order_id += 1
-        return oid
 
-    # ─── Errores ─────────────────────────────────────────────────
-    # Códigos de error relevantes de IB:
-    # 200 = No security definition   → símbolo no válido
-    # 354 = Requested market data    → sin permiso de datos
-    # 2104/2106 = Farm connection OK → informativos, no errores reales
-    # 10197 = No market data         → delayed o sin suscripción
+    def nextValidId(self, orderId: int):
+        '''
+        IB calls this when connecting with the first valid order ID.
+        All placeOrder calls must use IDs greater than or equal to this one.
+        '''
+        self._next_order_id = orderId
+        print(f"[IB] nextValidId recibido: {orderId}")
+
+    def next_order_id(self) -> int:
+        '''
+        Use this only for orders (placeOrder).
+        next_id() is still used for reqHistoricalData, reqMktData, etc.
+        '''
+        with self._lock:
+            oid = self._next_order_id
+            self._next_order_id += 1
+            return oid
+
+    # ─── Errors ─────────────────────────────────────────────────
+    # Relevant IB error codes:
+    # 200 = No security definition   → invalid symbol
+    # 354 = Requested market data    → no market data permission
+    # 2104/2106 = Farm connection OK → informational, not actual errors
+    # 10197 = No market data         → delayed data or no subscription
     INFORMATIONAL_CODES = {2104, 2106, 2107, 2108, 2158, 2103, 2105, 2157}
 
     def error(self, reqId, errorCode, errorString, advancedOrderRejectJson=""):
         #print(f"[ERROR RAW] reqId={reqId} code={errorCode} msg={errorString}")
         
         if errorCode in self.INFORMATIONAL_CODES:
-            # Mensajes de estado de conexión, no son errores reales
+            # Connection status messages, not actual errors
             return
 
         print(f"[ERROR IB] reqId={reqId} code={errorCode} msg={errorString}")
@@ -692,7 +681,7 @@ class IBConnection(EClient, EWrapper):
             print(f"  → Sin market data (delayed/sin suscripción) para reqId={reqId}.")
 
         elif errorCode in (1100, 1101, 1102):
-            # Desconexión / reconexión
+            # Disconnection / reconnection
             print(f"  → Conectividad con TWS: code={errorCode}. "
                   f"{'Reconectado.' if errorCode == 1102 else 'Desconectado.'}")
 
