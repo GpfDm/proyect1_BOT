@@ -14,7 +14,7 @@ class ScannerManager():
         self.ID_contador = 0
         self.ohlc_by_symbol: dict[str, Ohlc] = {}
 
-        # Máximo de premarket volume permitido
+        # Maximum allowed premarket volume
         self.MAX_PREMARKET_VOLUME = 1_000_000
 
     def new_scanner(self) -> ScannerClient:
@@ -28,14 +28,14 @@ class ScannerManager():
             return None
         return scan
 
-    # ─── Filtro premarket volume ──────────────────────────────────
+    # ─── Premarket volume filter ──────────────────────────────────
     def _check_premarket_volume(self, symbol: str, contract) -> bool:
         '''
-        Pide datos premarket (useRTH=0) y suma volumen antes de 9:30 ET.
-        Usa el registro normal de IBConnection (_premarket_callbacks),
-        igual que el resto de reqId del bot, en vez de sustituir
-        callbacks temporalmente (eso era frágil con el wrapper de ibapi).
-        Devuelve True si el volumen premarket <= MAX_PREMARKET_VOLUME.
+        Requests premarket data (useRTH=0) and adds up the volume before 9:30 ET.
+        Uses the regular IBConnection callback system (_premarket_callbacks),
+        just like the bot's other reqIds, instead of temporarily replacing
+        callbacks, which was unreliable with the ibapi wrapper.
+        Returns True if premarket volume is <= MAX_PREMARKET_VOLUME.
         '''
         req_id = self.connection.next_id()
 
@@ -53,7 +53,7 @@ class ScannerManager():
                 durationStr="1 D",
                 barSizeSetting="1 min",
                 whatToShow="TRADES",
-                useRTH=0,           # 0 = incluye premarket
+                useRTH=0,           # 0 = includes premarket data
                 formatDate=1,
                 keepUpToDate=False,
                 chartOptions=[]
@@ -61,9 +61,9 @@ class ScannerManager():
         except Exception as e:
             print(f"[FILTRO PREMARKET] {symbol}: error pidiendo datos -> {e}")
             self.connection._premarket_callbacks.pop(req_id, None)
-            return True  # si falla, dejamos pasar (conservador)
+            return True  # If the request fails, let the symbol through
 
-        # Esperar respuesta máximo 10 segundos
+        # Wait up to 10 seconds for a response
         timeout = 10
         t_start = time.time()
         entry = self.connection._premarket_callbacks[req_id]
@@ -74,7 +74,7 @@ class ScannerManager():
 
         if entry is None or not entry["done"]:
             print(f"[FILTRO PREMARKET] {symbol}: timeout esperando datos, se permite pasar")
-            return True  # conservador: si no hay respuesta, dejamos pasar
+            return True  # If no response is received, let the symbol through
 
         premarket_vol = sum(entry["volumes"])
         ok = premarket_vol <= self.MAX_PREMARKET_VOLUME
@@ -83,12 +83,12 @@ class ScannerManager():
               f"{'✅ OK' if ok else '❌ DESCARTADO'}")
         return ok
 
-    # ─── Nuevo símbolo detectado por el scanner ───────────────────
+    # ─── New symbol detected by the scanner ───────────────────────
     def on_new_symbol(self, symbol: str, contract) -> Optional[Ohlc]:
         '''
-        Llamado por ScannerClient en scannerDataEnd.
-        Lanza un thread separado para no bloquear el hilo de IB
-        mientras espera la respuesta del filtro premarket.
+        Called by ScannerClient from scannerDataEnd.
+        Runs the processing in a separate thread so the IB thread
+        isn't blocked while waiting for the premarket filter response.
         '''
         if symbol in self.ohlc_by_symbol:
          return
@@ -96,24 +96,26 @@ class ScannerManager():
         import threading
         t = threading.Thread(target=self._process_new_symbol,args=(symbol, contract),daemon=True)
         t.start()
+
     def _process_new_symbol(self, symbol: str, contract) -> None:
         '''
-        Corre en thread separado. Contiene toda la lógica que antes
-        estaba en on_new_symbol: filtro premarket + creación de Ohlc.
+        Runs in a separate thread. Contains all the logic that used to be
+        handled by on_new_symbol: premarket filter + Ohlc creation.
         '''
-        # Doble check por si el símbolo llegó dos veces mientras arrancaba el thread
+        # Double-check in case the symbol was received twice while the thread was starting
         if symbol in self.ohlc_by_symbol:
          return
 
-        # ── Filtro premarket volume ──
+        # ── Premarket volume filter ──
         if not self._check_premarket_volume(symbol, contract):
          print(f"[FILTRO] {symbol} descartado: premarket volume > {self.MAX_PREMARKET_VOLUME:,}")
          return
-        # Filtro de float:
+
+        # Float filter:
         if not self._check_float(symbol, contract):
          return
         
-        #── Crear Ohlc ──
+        # ── Create Ohlc ──
         ohlc = Ohlc(symbol, self.connection, contract)
         ohlc.data_historic.set_duration_str("1 D")
         ohlc.data_historic.set_bar_size_setting("1 min")
@@ -123,11 +125,13 @@ class ScannerManager():
         ohlc.start()
         self.ohlc_by_symbol[symbol] = ohlc
         print(f"[NUEVO SIMBOLO] {symbol} -> Ohlc creado (reqId={ohlc.req_id})")
-    # ─── Resto de métodos ─────────────────────────────────────────
+
+    # ─── Remaining methods ────────────────────────────────────────
     def remove_symbol(self, symbol: str):
         ohlc = self.ohlc_by_symbol.pop(symbol, None)
         if ohlc:
             ohlc.cancelar_suscrpdatos()
+
     def delete_scanner(self, scan_id: int):
         scan = self.scanners.get(scan_id)
         if scan is None:
@@ -164,6 +168,7 @@ class ScannerManager():
         if updated:
             scan.ADDR = (scan.SERVER, scan.PORT)
         scan.reconnect(scan.get_id(), [])
+
     def _check_float(self, symbol: str, contract) -> bool:
         MAX_FLOAT = 20_000_000
         try:
