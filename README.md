@@ -1,4 +1,4 @@
-# LONG10MIN
+# Multi-strategy-momentum-trading-bot
 
 Algorithmic trading bot written in Python, connected to Interactive Brokers via the TWS API, that trades low-float small-cap U.S. equities with a long-only bias.
 
