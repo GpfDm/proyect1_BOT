@@ -4,9 +4,7 @@ import pytz
 from src.main.IBClient.ohlc.Data import Ohlc
 
 
-# ─────────────────────────────────────────────
-#  CONDITIONS
-# ─────────────────────────────────────────────
+# CONDITIONS
 class Conditions():
     def __init__(self, ohlc: Ohlc):
         self.ohlc = ohlc
@@ -40,22 +38,20 @@ class Conditions():
         return (datetime.now() - datetime.strptime(lod_bar["date"], "%Y%m%d %H:%M:%S")).total_seconds()
     
     '''
-    FUTURAS IMPLEMENTACIONES :
-    def bar_close_above_hod() --> 
-    
-    def shares_rotation(self) --> float:
-    
-       Es el vol de la session hasta el momento / numero de acciones disponibles para tradear.
+    FUTURE IMPLEMENTATIONS:
 
+    def bar_close_above_hod() -->
+
+    def shares_rotation(self) --> float:
+
+       Session volume so far / number of shares available to trade.
     '''
 
-# ─────────────────────────────────────────────
-#  ESTRATEGIAS
-# ─────────────────────────────────────────────
+# STRATEGIES
 class LONG10MIN():
     '''
-    Estrategia de apertura (9:40 - 9:50 ET).
-    Devuelve 1 si se cumplen todas las condiciones, 0 si no.
+    Opening strategy (9:40 - 9:50 ET).
+    Returns 1 if all conditions are met, 0 otherwise.
     '''
     def __init__(self, ohlc: Ohlc):
         self.conditions = Conditions(ohlc)
@@ -69,11 +65,10 @@ class LONG10MIN():
             return 1
         return 0
 
-#  FUNCIÓN INTERNA  (usada por PositionManager)
 def _place_order(ohlc: Ohlc, tp_pct: float, sl_pct: float):
     '''
-    Uso interno: PositionManager llama a esta función tras validar
-    slots y liquidez. No llamar directamente desde el loop principal.
+    Internal use: PositionManager calls this function after checking
+    available slots and liquidity. Do not call it directly from the main loop.
     '''
     order = ohlc.buy_order()
     order_id = ohlc.connection.next_id()
@@ -88,12 +83,12 @@ def _place_order(ohlc: Ohlc, tp_pct: float, sl_pct: float):
 
 class LONG10MIN2():
     '''
-    Estrategia de apertura (9:30 - 9:40 ET).
-    Devuelve 1 si se cumplen todas las condiciones, 0 si no.
+    Opening strategy (9:30 - 9:40 ET).
+    Returns 1 if all conditions are met, 0 otherwise.
 
-    Para esta estrategia las condiciones son:
+    Strategy conditions:
      Premarket volume: 300k MAX
-     Market cap: 200 Millones MAX
+     Market cap: 200 million MAX
      Open price: 1 MIN
     '''
     def __init__(self, ohlc: Ohlc):
@@ -110,20 +105,21 @@ class LONG10MIN2():
     
 class CHINASLOCAS():
     '''
-    1.12 oportunidades al mes.
+    1.12 opportunities per month.
+    
     IDEA:
-    Acciones chinas con volatilidad alta
-    que rompen el HOD en horas cercanas al close y que al ser low float producen un short 
-    Squeeze bastante fuerte.
+    High-volatility Chinese stocks that break the HOD
+    close to the end of the session. Because they have a low float,
+    these moves can trigger a strong short squeeze.
 
     CONDITIONS:
-    TIME OF THE DAY > 14:00
+    TIME OF DAY > 14:00
     BAR CLOSE > HOD
     SHARES ROTATION > 3
 
-    REQUISITOS DE SCANNER:
-    Market cap max 200 Millones
-    Shares float max 20 Millones
+    SCANNER REQUIREMENTS:
+    Market cap max 200 million
+    Shares float max 20 million
     Gap value min 20%
     '''
     def __init__(self,ohlc: Ohlc):
@@ -137,17 +133,18 @@ class CHINASLOCAS():
                 and 100_000 < c.session_volume() < 500_000):
             return 1
         return 0
+
 class PMLONG():
     '''
-    PREV DAY FILTERS:
-    VOLUMEN: Min 5Millones
-    MARKET CAP OPEN: Max 200Millones
-    SHARES FLOAT: 20Millones
+    PREVIOUS DAY FILTERS:
+    VOLUME: Min 5 million
+    MARKET CAP AT OPEN: Max 200 million
+    SHARES FLOAT: 20 million
 
     CONDITIONS:
-    ELAPSED TIME FROM LOD: 2Minutes
-    CUMULATIVE SESSION VOLUME: > 400 000
-    Shares rotation: < 0.5
+    ELAPSED TIME FROM LOD: 2 minutes
+    CUMULATIVE SESSION VOLUME: > 400,000
+    SHARES ROTATION: < 0.5
     '''
     def __init__(self,ohlc: Ohlc):
         self.conditions = Conditions(ohlc)
@@ -160,27 +157,3 @@ class PMLONG():
                 and 100_000 < c.session_volume() < 500_000):
             return 1
         return 0
-
-# ─────────────────────────────────────────────
-#  PROBLEMAS RESUELTOS / PENDIENTES
-# ─────────────────────────────────────────────
-'''
-RESUELTOS:
- ✅ Monitoreo activo TP/SL via tickPrice LAST
- ✅ SL duro GTC en broker si el bot se cae
- ✅ Comprobación de liquidez antes de entrar
- ✅ Detección de HALT (tickString tickType=49)
- ✅ Logging persistente de cada trade (trades_log.csv)
- ✅ Filtro de ticks inválidos (price <= 0)
- ✅ Manejo de errores IB (200, 354, 1100-1102, etc.)
- ✅ execDetails: recalibra TP/SL con fill real
- ✅ orderStatus: detecta stop duro ejecutado sin el bot
- ✅ reqPositions al arrancar: recupera posición si bot se reinició
- ✅ Multiposición: máx 5 slots, riesgo fijo por trade
- ✅ Notificación cuando señal no se puede ejecutar (slots llenos / ilíquido)
-
-PENDIENTES (después del paper trading del jueves):
- ⬜ TP/SL dinámico basado en ATR
- ⬜ Tests unitarios de Conditions/LONG10MIN con datos falsos
- ⬜ Backtest de la estrategia sobre datos históricos
-'''
