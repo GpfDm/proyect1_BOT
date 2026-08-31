@@ -10,14 +10,14 @@ from src.main.IBClient.ohlc.Data import IBConnection
 
 class ScannerClient():
     '''
-    Ya NO hereda de EClient/EWrapper. Usa la IBConnection compartida
-    para mandar requests, y recibe callbacks ruteados desde ella.
+    It does not inherit from EClient/EWrapper. It uses the shared IBConnection
+    to send requests and receives callbacks routed from it.
     '''
     def __init__(self, connection, manager):
         self.connection = connection
         self.manager = manager
-        self.scanner_buffer = {}  # resultados temporales mientras llegan
-        self.scanner_live = {}    # resultados finales tras scannerDataEnd
+        self.scanner_buffer = {}  # before scannerdataend
+        self.scanner_live = {}    # after scannerdataend
         self.state_loop = False
         self.req_id = None
         self.id = None
@@ -25,8 +25,8 @@ class ScannerClient():
 
     def init_scanner(self, Scan: ScannerSubscription, Filters: list[TagValue]):
         '''
-        Suscribe este scanner. Se registra en la connection para
-        que pueda rutear scannerData/scannerDataEnd hacia aquí.
+        Subscribe this scanner. Register it on the connection 
+        so that it can route scannerData/scannerDataEnd here.
         '''
         try:
             self.req_id = self.connection.next_id()
@@ -43,7 +43,7 @@ class ScannerClient():
     def scannerData(self, reqId: int, rank: int, contractDetails: ContractDetails,
                      distance: str, benchmark: str, projection: str, legsStr: str):
         '''
-        Llamado (vía connection) por cada resultado del scanner.
+        Called (via connection) for each scanner result.        
         '''
         c = contractDetails.contract
         self.scanner_buffer[c.symbol] = {
@@ -53,9 +53,9 @@ class ScannerClient():
 
     def scannerDataEnd(self, reqId: int):
         '''
-        Llamado (vía connection) cuando termina el envío de resultados.
-        Aquí pasamos los resultados a "live" y avisamos al manager
-        de cada símbolo para que cree su Ohlc si es nuevo.
+        A call is made (via connection) when the results transmission is complete.
+        Here we move the results to "live" and notify the manager
+        of each symbol to create its Ohlc if it's new.
         '''
         self.scanner_live = self.scanner_buffer
         self.scanner_buffer = {}
@@ -65,8 +65,8 @@ class ScannerClient():
 
     def scan_loop(self, scan: ScannerSubscription, interval: int = 5):
         '''
-        Re-suscribe el scanner periódicamente para refrescar resultados.
-        Pensado para correr en un thread propio.
+        Resubscribe the scanner periodically to refresh results.
+        Designed to run in its own thread.
         '''
         self.state_loop = True
         while self.state_loop:
@@ -82,8 +82,7 @@ class ScannerClient():
 
     def stop(self):
         '''
-        Detiene el scanner. Ya no toca el socket/hilo directamente:
-        eso lo gestiona IBConnection.
+        Stops the scanner
         '''
         self.state_loop = False
         try:
@@ -92,6 +91,3 @@ class ScannerClient():
                 self.connection.scanner_by_reqid.pop(self.req_id, None)
         except Exception:
             pass
-
-# Ejemplo de uso aislado (requiere una IBConnection ya conectada
-# y un ScannerManager para registrar Ohlc de los símbolos detectados)
