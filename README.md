@@ -54,7 +54,7 @@ Flow: IB's scanner detects candidates → `ScannerManager` filters them (premark
 - Notifications (console + optional email) when a signal can't be executed
 
 ## Backtesting
-The strategies were developed and iterated on using Flash Research as the backtesting simulator. However, survivorship bias and overoptimization in that environment make these backtest results invalid as a basis for live trading — the numbers looked strong in simulation but don't reliably translate to real market conditions. This gap is the main reason the bot's live results diverge from what the backtests suggested.
+The strategies were developed and iterated on using Flash Research as the backtesting simulator. However, survivorship bias, look-ahead bias, and overoptimization in that environment make these backtest results invalid as a basis for live trading — the numbers looked strong in simulation but don't reliably translate to real market conditions. This gap is the main reason the bot's live results diverge from what the backtests suggested.
 
 ## Status & limitations
 - **Live vs. backtest discrepancy**: in simulation, the bot returned close to 20% in about two weeks. That performance did not carry over to live trading — most likely a combination of statistical variance (a short two-week sample isn't representative) and the strategy itself not being sufficiently well-designed or robust.
